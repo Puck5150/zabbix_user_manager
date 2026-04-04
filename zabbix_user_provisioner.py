@@ -154,13 +154,15 @@ def main():
             logger.error("Must provide --username or --csv")
             return 1
 
-        users = [{
-            "username": args.username,
-            "first_name": args.first_name,
-            "last_name": args.last_name,
-            "email": args.email,
-            "is_ldap": args.ldap,
-        }]
+        users = [
+            {
+                "username": args.username,
+                "first_name": args.first_name,
+                "last_name": args.last_name,
+                "email": args.email,
+                "is_ldap": args.ldap,
+            }
+        ]
 
     for instance in instances:
         process_instance(instance, users, args, logger, api_user, api_pass)
