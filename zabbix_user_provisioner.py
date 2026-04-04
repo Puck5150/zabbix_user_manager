@@ -108,24 +108,24 @@ def process_instance(
         for user in users:
             username = user["username"]
 
-            if user_exists(client.get_users(username)):
-                logger.info(f"User already exists, skipping: {username}")
-                continue
-
-            payload = build_user_payload(
-                username=username,
-                first_name=user.get("first_name") or "",
-                last_name=user.get("last_name") or "",
-                roleid=default_role,
-                user_group_ids=[default_group],
-                is_ldap_user=str_to_bool(user.get("is_ldap"), default=True),
-            )
-
-            if args.dry_run:
-                logger.info(f"[DRY RUN] Would create user: {payload}")
-                continue
-
             try:
+                if user_exists(client.get_users(username)):
+                    logger.info(f"User already exists, skipping: {username}")
+                    continue
+
+                payload = build_user_payload(
+                    username=username,
+                    first_name=user.get("first_name") or "",
+                    last_name=user.get("last_name") or "",
+                    roleid=default_role,
+                    user_group_ids=[default_group],
+                    is_ldap_user=str_to_bool(user.get("is_ldap"), default=True),
+                )
+
+                if args.dry_run:
+                    logger.info(f"[DRY RUN] Would create user: {payload}")
+                    continue
+
                 result = client.create_user(payload)
                 logger.info(f"Created user {username} | result={result}")
             except Exception as exc:
