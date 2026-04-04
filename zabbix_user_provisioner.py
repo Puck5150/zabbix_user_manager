@@ -2,14 +2,16 @@ import argparse
 import csv
 import os
 import sys
+from pathlib import Path
 
 from modules.logger import setup_logger
-from modules.utils import load_yaml_file
+from modules.utils import load_yaml_file, str_to_bool
 from modules.zabbix_api import ZabbixAPI
-from modules.user_ops import build_user_payload
+from modules.user_ops import build_user_payload, user_exists
 
 
-CONFIG_FILE = "config/zabbix_instances.yaml"
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_FILE = BASE_DIR / "config" / "zabbix_instances.yaml"
 
 
 def parse_args():
@@ -34,11 +36,15 @@ def load_instances(env=None):
     config = load_yaml_file(CONFIG_FILE)
     instances = []
 
-    for env_name, env_data in config["environments"].items():
+    environments = config.get("environments", {})
+    if not environments:
+        raise ValueError(f"No environments defined in config: {CONFIG_FILE}")
+
+    for env_name, env_data in environments.items():
         if env and env != env_name:
             continue
 
-        for inst in env_data["instances"]:
+        for inst in env_data.get("instances", []):
             instances.append(inst)
 
     return instances
@@ -46,7 +52,7 @@ def load_instances(env=None):
 
 def load_users_from_csv(path):
     users = []
-    with open(path, newline="") as csv_file:
+    with open(path, newline="", encoding="utf-8") as csv_file:
         reader = csv.DictReader(csv_file)
         for row in reader:
             users.append(row)
@@ -74,36 +80,49 @@ def process_instance(instance, users, args, logger, api_user, api_pass):
         verify_ssl=instance.get("verify_ssl", True),
     )
 
-    client.login()
+    try:
+        client.login()
 
-    groups = client.get_user_groups()
-    roles = client.get_roles()
+        groups = client.get_user_groups()
+        roles = client.get_roles()
 
-    # Simple default selection (you can expand this later)
-    default_group = groups[0]["usrgrpid"]
-    default_role = roles[0]["roleid"]
+        if not groups:
+            raise ValueError(f"No user groups returned for instance: {instance['url']}")
 
-    for user in users:
-        payload = build_user_payload(
-            username=user["username"],
-            first_name=user["first_name"],
-            last_name=user["last_name"],
-            roleid=default_role,
-            user_group_ids=[default_group],
-            is_ldap_user=user.get("is_ldap", "true").lower() == "true",
-        )
+        if not roles:
+            raise ValueError(f"No roles returned for instance: {instance['url']}")
 
-        if args.dry_run:
-            logger.info(f"[DRY RUN] Would create user: {payload}")
-            continue
+        # Simple default selection (you can expand this later)
+        default_group = groups[0]["usrgrpid"]
+        default_role = roles[0]["roleid"]
 
-        try:
-            result = client.create_user(payload)
-            logger.info(f"Created user {user['username']} | result={result}")
-        except Exception as e:
-            logger.error(f"Failed to create {user['username']}: {e}")
+        for user in users:
+            username = user["username"]
 
-    client.logout()
+            if user_exists(client.get_users(username)):
+                logger.info(f"User already exists, skipping: {username}")
+                continue
+
+            payload = build_user_payload(
+                username=username,
+                first_name=user.get("first_name") or "",
+                last_name=user.get("last_name") or "",
+                roleid=default_role,
+                user_group_ids=[default_group],
+                is_ldap_user=str_to_bool(user.get("is_ldap"), default=True),
+            )
+
+            if args.dry_run:
+                logger.info(f"[DRY RUN] Would create user: {payload}")
+                continue
+
+            try:
+                result = client.create_user(payload)
+                logger.info(f"Created user {username} | result={result}")
+            except Exception as exc:
+                logger.error(f"Failed to create {username}: {exc}")
+    finally:
+        client.logout()
 
 
 def main():
