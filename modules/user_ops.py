@@ -3,10 +3,6 @@ from __future__ import annotations
 from typing import Any
 
 
-def build_usergroup_refs(group_ids: list[str]):
-    return [{"usrgrpid": gid} for gid in group_ids]
-
-
 def build_user_payload(
     username: str,
     first_name: str,
@@ -21,7 +17,7 @@ def build_user_payload(
         "name": first_name,
         "surname": last_name,
         "roleid": roleid,
-        "usrgrps": build_usergroup_refs(user_group_ids),
+        "usrgrps": [{"usrgrpid": gid} for gid in user_group_ids],
     }
 
     # Only include password for local users
@@ -29,7 +25,3 @@ def build_user_payload(
         payload["passwd"] = password
 
     return payload
-
-
-def user_exists(existing_users: list[dict[str, Any]]) -> bool:
-    return len(existing_users) > 0
