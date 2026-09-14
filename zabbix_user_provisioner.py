@@ -7,7 +7,7 @@ from pathlib import Path
 from modules.logger import setup_logger
 from modules.utils import load_yaml_file, str_to_bool
 from modules.zabbix_api import ZabbixAPI
-from modules.user_ops import build_user_payload, user_exists
+from modules.user_ops import build_user_payload
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -34,29 +34,21 @@ def parse_args():
 
 def load_instances(env=None):
     config = load_yaml_file(CONFIG_FILE)
-    instances = []
-
     environments = config.get("environments", {})
     if not environments:
         raise ValueError(f"No environments defined in config: {CONFIG_FILE}")
 
-    for env_name, env_data in environments.items():
-        if env and env != env_name:
-            continue
-
-        for inst in env_data.get("instances", []):
-            instances.append(inst)
-
-    return instances
+    return [
+        inst
+        for env_name, env_data in environments.items()
+        if not env or env == env_name
+        for inst in env_data.get("instances", [])
+    ]
 
 
 def load_users_from_csv(path):
-    users = []
     with open(path, newline="", encoding="utf-8") as csv_file:
-        reader = csv.DictReader(csv_file)
-        for row in reader:
-            users.append(row)
-    return users
+        return list(csv.DictReader(csv_file))
 
 
 def get_credentials():
@@ -109,7 +101,7 @@ def process_instance(
             username = user["username"]
 
             try:
-                if user_exists(client.get_users(username)):
+                if client.get_users(username):
                     logger.info(f"User already exists, skipping: {username}")
                     continue
 
